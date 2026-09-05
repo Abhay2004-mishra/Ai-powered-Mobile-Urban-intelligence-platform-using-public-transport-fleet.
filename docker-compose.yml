@@ -1,0 +1,48 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgis/postgis:15-3.3
+    container_name: urbaneye-postgres
+    environment:
+      POSTGRES_USER: urbaneye
+      POSTGRES_PASSWORD: urbaneyepassword
+      POSTGRES_DB: urbaneye_db
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  mqtt:
+    image: eclipse-mosquitto:2
+    container_name: urbaneye-mqtt
+    ports:
+      - "1883:1883"
+      - "9001:9001"
+
+  backend:
+    build:
+      context: ./backend
+    container_name: urbaneye-backend
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://urbaneye:urbaneyepassword@postgres:5432/urbaneye_db
+      - MQTT_BROKER=mqtt
+      - MQTT_PORT=1883
+      - JWT_SECRET=urbaneye_super_secret_sih_2026_key
+    depends_on:
+      - postgres
+      - mqtt
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: urbaneye-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
