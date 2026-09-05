@@ -74,10 +74,10 @@ Log in with any of the demo accounts below:
 
 | Role | Email | Password | Access Rights |
 |---|---|---|---|
-| **Admin** | `admin@urbaneye.ai` | `demo` | Full system, fleet, route, and user control |
-| **Municipal Officer** | `officer@urbaneye.ai` | `demo` | Command map, incident triage, work order dispatch |
-| **Field Worker** | `worker@urbaneye.ai` | `demo` | Assigned work orders, status updates, completion proof |
-| **Bus Operator** | `operator@urbaneye.ai` | `demo` | Assigned bus telemetry, camera status, route details |
+| **Admin** | `admin@urbaneye.ai` | `******` | Full system, fleet, route, and user control |
+| **Municipal Officer** | `officer@urbaneye.ai` | `*****` | Command map, incident triage, work order dispatch |
+| **Field Worker** | `worker@urbaneye.ai` | `*****` | Assigned work orders, status updates, completion proof |
+| **Bus Operator** | `operator@urbaneye.ai` | `*****` | Assigned bus telemetry, camera status, route details |
 
 ---
 
