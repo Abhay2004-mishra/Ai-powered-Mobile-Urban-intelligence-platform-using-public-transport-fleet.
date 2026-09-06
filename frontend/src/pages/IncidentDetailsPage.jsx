@@ -1,18 +1,50 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import IncidentModal from '../components/IncidentModal';
-import { AlertTriangle, Filter, CheckCircle2, ShieldAlert } from 'lucide-react';
+import { wsService } from '../services/websocket';
+import { AlertTriangle, Filter, CheckCircle2, ShieldAlert, RefreshCw } from 'lucide-react';
 
 const IncidentDetailsPage = () => {
   const [incidents, setIncidents] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [selected, setSelected] = useState(null);
   const [filterSeverity, setFilterSeverity] = useState('All');
 
+  const fetchIncidents = (silent = false) => {
+    if (!silent) setRefreshing(true);
+    api.get('/api/incidents')
+      .then((res) => {
+        setIncidents(res.data);
+      })
+      .catch(console.error)
+      .finally(() => {
+        setLoading(false);
+        setRefreshing(false);
+      });
+  };
+
   useEffect(() => {
-    api.get('/api/incidents').then((res) => {
-      setIncidents(res.data);
-    }).finally(() => setLoading(false));
+    fetchIncidents();
+
+    const unsub = wsService.subscribe((event) => {
+      if (
+        event.event_type === 'DRIVER_HAZARD_REPORTED' || 
+        event.event_type === 'INCIDENT_UPDATED' || 
+        event.event_type === 'SIH_TRIGGERED_EVENT'
+      ) {
+        fetchIncidents(true);
+      }
+    });
+
+    const interval = setInterval(() => {
+      fetchIncidents(true);
+    }, 5000);
+
+    return () => {
+      unsub();
+      clearInterval(interval);
+    };
   }, []);
 
   const filtered = incidents.filter(i => filterSeverity === 'All' || i.severity === filterSeverity.toLowerCase());

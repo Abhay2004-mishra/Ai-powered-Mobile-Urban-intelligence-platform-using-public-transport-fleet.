@@ -18,6 +18,7 @@ import PrivacyPage from './pages/PrivacyPage';
 import SystemHealthPage from './pages/SystemHealthPage';
 import UserManagementPage from './pages/UserManagementPage';
 import BusDriverCockpitPage from './pages/BusDriverCockpitPage';
+import WorkflowStudioPage from './pages/WorkflowStudioPage';
 import { ShieldAlert, ArrowLeft } from 'lucide-react';
 
 const ProtectedRoute = ({ children }) => {
@@ -116,7 +117,7 @@ const App = () => {
                     <Route 
                       path="/work-orders" 
                       element={
-                        <RoleProtectedRoute allowedRoles={['admin', 'municipal_officer', 'field_worker']}>
+                        <RoleProtectedRoute allowedRoles={['admin', 'municipal_officer', 'field_worker', 'bus_operator']}>
                           <WorkOrdersPage />
                         </RoleProtectedRoute>
                       } 
@@ -144,6 +145,16 @@ const App = () => {
                       element={
                         <RoleProtectedRoute allowedRoles={['admin', 'municipal_officer', 'bus_operator']}>
                           <RoutesPage />
+                        </RoleProtectedRoute>
+                      } 
+                    />
+
+                    {/* 3D Bus & End-to-End Workflow Studio */}
+                    <Route 
+                      path="/workflow" 
+                      element={
+                        <RoleProtectedRoute allowedRoles={['admin', 'municipal_officer', 'bus_operator', 'field_worker']}>
+                          <WorkflowStudioPage />
                         </RoleProtectedRoute>
                       } 
                     />

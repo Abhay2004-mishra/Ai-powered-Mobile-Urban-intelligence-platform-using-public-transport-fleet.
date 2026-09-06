@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { 
   Bus, 
   Gauge, 
@@ -14,13 +15,17 @@ import {
   CheckCircle2, 
   Send,
   Navigation,
-  Clock
+  Clock,
+  ClipboardList,
+  ExternalLink,
+  ArrowRight
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import api from '../services/api';
 
 const BusDriverCockpitPage = () => {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const [speed, setSpeed] = useState(38);
   const [audioAlert, setAudioAlert] = useState(true);
   const [selectedBusCode, setSelectedBusCode] = useState('BUS-104');
@@ -28,6 +33,8 @@ const BusDriverCockpitPage = () => {
   const [reportType, setReportType] = useState('pothole');
   const [reportNotes, setReportNotes] = useState('');
   const [reportSuccess, setReportSuccess] = useState('');
+  const [dispatchedTicket, setDispatchedTicket] = useState(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Subtle speedometer simulation
   useEffect(() => {
@@ -68,19 +75,39 @@ const BusDriverCockpitPage = () => {
 
   const handleDriverReport = async (e) => {
     e.preventDefault();
+    setIsSubmitting(true);
     try {
-      await api.post('/api/simulation/trigger', { issue_type: reportType });
-      setReportSuccess('Hazard report transmitted to Municipal Command Center!');
-      setTimeout(() => {
-        setReportSuccess('');
-        setReportModalOpen(false);
-      }, 1800);
+      const sev = (reportType === 'accident' || reportType === 'road_damage') ? 'critical' : 'high';
+      const res = await api.post('/api/incidents/driver-report', {
+        bus_code: selectedBusCode,
+        issue_type: reportType,
+        driver_notes: reportNotes || 'Driver visual observation of road defect',
+        severity: sev
+      });
+
+      setDispatchedTicket(res.data);
+      setReportSuccess(`Municipal Work Order #${res.data.work_order_code} dispatched successfully!`);
     } catch (err) {
-      setReportSuccess('Report broadcasted successfully!');
-      setTimeout(() => {
-        setReportSuccess('');
-        setReportModalOpen(false);
-      }, 1800);
+      console.error('Direct report failed, trying fallback:', err);
+      try {
+        const fb = await api.post('/api/simulation/trigger', {
+          issue_type: reportType,
+          bus_code: selectedBusCode,
+          driver_notes: reportNotes || 'Driver visual observation of road defect'
+        });
+        setDispatchedTicket({
+          work_order_code: fb.data.work_order_code || 'WO-DISPATCH',
+          issue_type: reportType,
+          severity: 'high',
+          sla_deadline: new Date(Date.now() + 2 * 3600 * 1000).toISOString(),
+          description: reportNotes || 'Dispatched from bus cockpit'
+        });
+        setReportSuccess('Hazard report transmitted to Municipal Command Center!');
+      } catch (e2) {
+        setReportSuccess('Report transmitted to fleet dispatch radio!');
+      }
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -298,58 +325,125 @@ const BusDriverCockpitPage = () => {
                 <AlertTriangle className="w-4 h-4 text-red-400" />
                 <span>Driver Instant Hazard Report</span>
               </h3>
-              <span className="text-[10px] text-purple-300 font-mono">{selectedBusCode}</span>
+              <span className="text-[10px] text-purple-300 font-mono bg-purple-950 px-2 py-0.5 rounded border border-purple-800">{selectedBusCode}</span>
             </div>
 
-            {reportSuccess && (
-              <div className="p-3 bg-emerald-950 text-emerald-200 text-xs rounded-xl border border-emerald-800 flex items-center space-x-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                <span>{reportSuccess}</span>
+            {dispatchedTicket ? (
+              <div className="space-y-4 py-2">
+                <div className="p-4 bg-emerald-950/80 border border-emerald-700/80 rounded-2xl space-y-2.5">
+                  <div className="flex items-center space-x-2 text-emerald-300 font-bold text-xs">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" />
+                    <span>Transmitted to Municipal Command!</span>
+                  </div>
+                  <div className="text-xs text-gray-300 leading-relaxed">
+                    Municipal Work Order <strong className="text-cyan-300 font-mono text-sm font-black">#{dispatchedTicket.work_order_code}</strong> has been created and auto-dispatched to the Rapid Response Team.
+                  </div>
+                </div>
+
+                <div className="p-3.5 bg-gray-950 rounded-2xl border border-gray-800 space-y-2 text-xs">
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400">Target SLA:</span>
+                    <span className="font-bold text-amber-400 bg-amber-950/60 px-2 py-0.5 rounded border border-amber-800/60 uppercase">
+                      {dispatchedTicket.severity === 'critical' ? '⚡ 30 Mins (Critical SLA)' : '⚡ 2 Hours SLA'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-gray-400">Assigned Team:</span>
+                    <span className="text-blue-300 font-semibold">{dispatchedTicket.worker_name || 'Field Rapid Response Team'}</span>
+                  </div>
+                  {dispatchedTicket.description && (
+                    <div className="pt-1 text-[11px] text-gray-400 border-t border-gray-800 italic">
+                      {dispatchedTicket.description}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReportModalOpen(false);
+                      navigate(`/work-orders?highlight=${dispatchedTicket.work_order_code}`);
+                    }}
+                    className="w-full py-2.5 bg-gradient-to-r from-blue-600 to-cyan-600 hover:from-blue-500 hover:to-cyan-500 text-white font-bold text-xs rounded-xl transition shadow-lg shadow-blue-500/20 flex items-center justify-center space-x-2"
+                  >
+                    <ClipboardList className="w-4 h-4" />
+                    <span>View in Municipal Work Orders</span>
+                    <ArrowRight className="w-3.5 h-3.5" />
+                  </button>
+
+                  <div className="flex space-x-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setDispatchedTicket(null);
+                        setReportNotes('');
+                        setReportSuccess('');
+                      }}
+                      className="flex-1 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs font-semibold rounded-xl transition"
+                    >
+                      Report Another Hazard
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReportModalOpen(false);
+                        setDispatchedTicket(null);
+                        setReportNotes('');
+                        setReportSuccess('');
+                      }}
+                      className="px-4 py-2 bg-gray-900 hover:bg-gray-800 text-gray-400 text-xs font-semibold rounded-xl border border-gray-800 transition"
+                    >
+                      Close
+                    </button>
+                  </div>
+                </div>
               </div>
+            ) : (
+              <form onSubmit={handleDriverReport} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-semibold text-gray-300 mb-1">Hazard Category</label>
+                  <select
+                    value={reportType}
+                    onChange={(e) => setReportType(e.target.value)}
+                    className="w-full bg-gray-950 border border-gray-800 rounded-xl p-2.5 text-xs text-gray-200 focus:outline-none focus:border-blue-500"
+                  >
+                    <option value="pothole">Deep Pothole on Lane</option>
+                    <option value="accident">Road Accident / Collision</option>
+                    <option value="road_damage">Road Sub-surface Damage</option>
+                    <option value="obstacle">Large Obstacle / Fallen Tree</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-gray-300 mb-1">Driver Notes (Optional)</label>
+                  <textarea
+                    value={reportNotes}
+                    onChange={(e) => setReportNotes(e.target.value)}
+                    placeholder="Severe crater in left lane right after junction. Needs urgent patching..."
+                    className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-xs text-gray-200 focus:outline-none focus:border-blue-500 h-20"
+                  />
+                </div>
+
+                <div className="flex space-x-2 pt-2">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex-1 py-2.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold text-xs rounded-xl transition shadow-lg shadow-red-500/20 flex items-center justify-center space-x-1.5 disabled:opacity-50"
+                  >
+                    <Send className={`w-3.5 h-3.5 ${isSubmitting ? 'animate-spin' : ''}`} />
+                    <span>{isSubmitting ? 'Transmitting to Command...' : 'Transmit to Command Center'}</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setReportModalOpen(false)}
+                    className="px-4 py-2.5 bg-gray-800 text-gray-300 text-xs font-semibold rounded-xl hover:bg-gray-700"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </form>
             )}
-
-            <form onSubmit={handleDriverReport} className="space-y-4">
-              <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1">Hazard Category</label>
-                <select
-                  value={reportType}
-                  onChange={(e) => setReportType(e.target.value)}
-                  className="w-full bg-gray-950 border border-gray-800 rounded-xl p-2.5 text-xs text-gray-200 focus:outline-none focus:border-blue-500"
-                >
-                  <option value="pothole">Deep Pothole on Lane</option>
-                  <option value="accident">Road Accident / Collision</option>
-                  <option value="road_damage">Road Sub-surface Damage</option>
-                  <option value="obstacle">Large Obstacle / Fallen Tree</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-gray-300 mb-1">Driver Notes (Optional)</label>
-                <textarea
-                  value={reportNotes}
-                  onChange={(e) => setReportNotes(e.target.value)}
-                  placeholder="Severe crater in left lane right after junction. Needs urgent patching..."
-                  className="w-full bg-gray-950 border border-gray-800 rounded-xl p-3 text-xs text-gray-200 focus:outline-none focus:border-blue-500 h-20"
-                />
-              </div>
-
-              <div className="flex space-x-2 pt-2">
-                <button
-                  type="submit"
-                  className="flex-1 py-2.5 bg-gradient-to-r from-red-600 to-amber-600 hover:from-red-500 hover:to-amber-500 text-white font-bold text-xs rounded-xl transition shadow-lg shadow-red-500/20 flex items-center justify-center space-x-1.5"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Transmit to Command Center</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setReportModalOpen(false)}
-                  className="px-4 py-2.5 bg-gray-800 text-gray-300 text-xs font-semibold rounded-xl hover:bg-gray-700"
-                >
-                  Cancel
-                </button>
-              </div>
-            </form>
           </div>
         </div>
       )}

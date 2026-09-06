@@ -42,10 +42,15 @@ const LoginPage = () => {
     setError('');
     setLoading(true);
     try {
-      await login(loginEmail, loginPassword);
+      const email = loginEmail.trim();
+      const normalizedEmail = email.endsWith('.comi') ? email.slice(0, -1) : email;
+      await login(normalizedEmail, loginPassword);
       navigate('/');
     } catch (err) {
-      const msg = err.response?.data?.detail || 'Invalid email or password. Please verify your credentials.';
+      const msg = err.response?.data?.detail 
+        || (!err.response && (err.request || err.message?.includes('Network Error'))
+            ? 'Backend server is not reachable on port 8000. Please ensure the backend is running.'
+            : 'Invalid email or password. Please verify your credentials.');
       setError(msg);
     } finally {
       setLoading(false);
@@ -67,19 +72,24 @@ const LoginPage = () => {
 
     setLoading(true);
     try {
+      const email = regEmail.trim();
+      const normalizedEmail = email.endsWith('.comi') ? email.slice(0, -1) : email;
       await register({
-        full_name: regFullName,
-        email: regEmail,
+        full_name: regFullName.trim(),
+        email: normalizedEmail,
         password: regPassword,
         role: regRole,
-        department: regDepartment
+        department: regDepartment.trim()
       });
       setSuccessMsg('Account registered successfully! Redirecting...');
       setTimeout(() => {
         navigate('/');
       }, 800);
     } catch (err) {
-      const msg = err.response?.data?.detail || 'Registration failed. Please check your information.';
+      const msg = err.response?.data?.detail 
+        || (!err.response && (err.request || err.message?.includes('Network Error'))
+            ? 'Backend server is not reachable on port 8000. Please ensure the backend is running.'
+            : 'Registration failed. Please check your information.');
       setError(msg);
     } finally {
       setLoading(false);

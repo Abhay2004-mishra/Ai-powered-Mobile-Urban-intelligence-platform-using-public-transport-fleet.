@@ -13,18 +13,32 @@ export const DemoProvider = ({ children }) => {
   const [liveIncidents, setLiveIncidents] = useState([]);
   const [selectedIncident, setSelectedIncident] = useState(null);
   const [selectedBus, setSelectedBus] = useState(null);
+  const [mqttPackets, setMqttPackets] = useState([]);
 
   useEffect(() => {
     wsService.connect();
     const unsubscribe = wsService.subscribe((event) => {
       if (event.event_type === 'SIH_DEMO_STEP') {
         setDemoStep(event);
+      } else if (event.event_type === 'MQTT_PACKET') {
+        setMqttPackets((prev) => [event, ...prev.slice(0, 19)]);
+      } else if (event.event_type === 'INCIDENT_RESOLVED') {
+        setLiveIncidents((prev) =>
+          prev.map((inc) =>
+            inc.incident_code === event.incident_code
+              ? { ...inc, status: 'RESOLVED' }
+              : inc
+          )
+        );
       } else if (event.event_type === 'NEW_DETECTION' || event.event_type === 'SIH_TRIGGERED_EVENT') {
         if (event.detection) {
           setLiveDetections((prev) => [event.detection, ...prev.slice(0, 19)]);
         }
         if (event.incident) {
-          setLiveIncidents((prev) => [event.incident, ...prev.filter((i) => i.incident_code !== event.incident.incident_code)]);
+          setLiveIncidents((prev) => [
+            event.incident,
+            ...prev.filter((i) => i.incident_code !== event.incident.incident_code)
+          ]);
         }
       } else if (event.event_type === 'LIVE_TELEMETRY') {
         if (event.new_detection) {
@@ -53,6 +67,26 @@ export const DemoProvider = ({ children }) => {
     }
   };
 
+  const sendConvoyScan = async (scanData) => {
+    try {
+      const res = await api.post('/api/simulation/convoy_scan', scanData);
+      return res.data;
+    } catch (e) {
+      console.error(e);
+      return null;
+    }
+  };
+
+  const resolveIncident = async (resolveData) => {
+    try {
+      const res = await api.post('/api/simulation/resolve_incident', resolveData);
+      return res.data;
+    } catch (e) {
+      console.error(e);
+      return null;
+    }
+  };
+
   return (
     <DemoContext.Provider
       value={{
@@ -69,8 +103,11 @@ export const DemoProvider = ({ children }) => {
         setSelectedIncident,
         selectedBus,
         setSelectedBus,
+        mqttPackets,
         triggerSIHDemoFlow,
-        triggerCustomIncident
+        triggerCustomIncident,
+        sendConvoyScan,
+        resolveIncident
       }}
     >
       {children}
@@ -79,3 +116,4 @@ export const DemoProvider = ({ children }) => {
 };
 
 export const useDemo = () => useContext(DemoContext);
+

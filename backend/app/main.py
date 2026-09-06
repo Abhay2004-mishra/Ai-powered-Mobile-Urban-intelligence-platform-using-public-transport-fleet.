@@ -29,12 +29,16 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("urbaneye.main")
 
 async def background_simulation_loop():
-    """Simulates bus movement and occasional AI detections every 8 seconds"""
+    """Simulates bus movement smoothly and generates occasional AI detections without flooding database"""
     await asyncio.sleep(3) # Initial warmup delay
     logger.info("Background Edge Bus Simulator started.")
     while True:
         try:
-            await asyncio.sleep(8)
+            await asyncio.sleep(4)
+            from app.routers.simulation import simulation_state
+            if not simulation_state.get("is_running", True):
+                continue
+
             async with AsyncSessionLocal() as db:
                 buses_res = await db.execute(select(Bus).where(Bus.status == "ONLINE"))
                 buses = buses_res.scalars().all()
@@ -46,61 +50,155 @@ async def background_simulation_loop():
                     bus.latitude += (0.0001 if bus.id % 2 == 0 else -0.0001)
                     bus.longitude += (0.0001 if bus.id % 3 == 0 else -0.0001)
                     db.add(bus)
+                await db.commit()
 
-                # Pick one random bus to generate a detection
                 import random
                 active_bus = random.choice(buses)
-                det_dict = ai_engine.generate_simulated_detection(
-                    bus_code=active_bus.bus_code,
-                    route_id=active_bus.route_id or "R-12",
-                    bus_lat=active_bus.latitude,
-                    bus_lng=active_bus.longitude
-                )
 
-                from datetime import datetime
-                det_code = f"DET-{uuid.uuid4().hex[:6].upper()}"
+                # Only generate new AI detections occasionally (15% chance per cycle)
+                if random.random() < 0.15:
+                    det_dict = ai_engine.generate_simulated_detection(
+                        bus_code=active_bus.bus_code,
+                        route_id=active_bus.route_id or "R-12",
+                        bus_lat=active_bus.latitude,
+                        bus_lng=active_bus.longitude
+                    )
+
+                    from datetime import datetime
+                    det_code = f"DET-{uuid.uuid4().hex[:6].upper()}"
+                    detection = Detection(
+                        detection_code=det_code,
+                        bus_id=det_dict["bus_id"],
+                        route_id=det_dict["route_id"],
+                        detection_class=det_dict["detection_class"],
+                        confidence=det_dict["confidence"],
+                        severity="medium",
+                        latitude=det_dict["latitude"],
+                        longitude=det_dict["longitude"],
+                        source="edge",
+                        timestamp=datetime.utcnow()
+                    )
+                    db.add(detection)
+                    await db.commit()
+
+                    # Run deduplication
+                    incident = await process_detection_for_deduplication(db, detection)
+
+                    # Broadcast over WS
+                    await ws_manager.broadcast({
+                        "event_type": "LIVE_TELEMETRY",
+                        "bus_code": active_bus.bus_code,
+                        "latitude": active_bus.latitude,
+                        "longitude": active_bus.longitude,
+                        "new_detection": {
+                            "detection_code": detection.detection_code,
+                            "detection_class": detection.detection_class,
+                            "confidence": detection.confidence,
+                            "severity": detection.severity,
+                            "latitude": detection.latitude,
+                            "longitude": detection.longitude
+                        },
+                        "incident": {
+                            "incident_code": incident.incident_code,
+                            "issue_type": incident.issue_type,
+                            "severity": incident.severity,
+                            "confirmations_count": incident.confirmations_count,
+                            "multi_bus_verified": incident.multi_bus_verified
+                        } if incident else None
+                    })
+                else:
+                    # Broadcast telemetry position update only
+                    await ws_manager.broadcast({
+                        "event_type": "LIVE_TELEMETRY",
+                        "bus_code": active_bus.bus_code,
+                        "latitude": active_bus.latitude,
+                        "longitude": active_bus.longitude
+                    })
+        except Exception as e:
+            logger.error(f"Error in background simulation loop: {e}")
+
+async def on_mqtt_message(topic: str, payload: dict):
+    """
+    Handles incoming MQTT packets from Edge Buses, Fleet Convoy, and Fog Gateways.
+    Persists detections into SQLite DB, triggers spatial deduplication,
+    creates/updates work orders, and broadcasts real-time updates over WebSockets.
+    """
+    try:
+        if "detections" in topic or payload.get("event_type") == "DETECTION":
+            from datetime import datetime
+            bus_id = payload.get("bus_id") or payload.get("bus_code") or "BUS-104"
+            route_id = payload.get("route_id") or "R-12"
+            detection_class = payload.get("detection_class") or payload.get("issue_type") or "pothole"
+            confidence = float(payload.get("confidence", 0.92))
+            severity = payload.get("severity") or ("critical" if detection_class in ["accident", "road_damage"] else "high")
+            latitude = float(payload.get("latitude", 31.6340))
+            longitude = float(payload.get("longitude", 74.8723))
+
+            det_code = payload.get("detection_code") or f"DET-{uuid.uuid4().hex[:6].upper()}"
+
+            async with AsyncSessionLocal() as db:
                 detection = Detection(
                     detection_code=det_code,
-                    bus_id=det_dict["bus_id"],
-                    route_id=det_dict["route_id"],
-                    detection_class=det_dict["detection_class"],
-                    confidence=det_dict["confidence"],
-                    severity="medium",
-                    latitude=det_dict["latitude"],
-                    longitude=det_dict["longitude"],
-                    source="edge",
+                    bus_id=bus_id,
+                    route_id=route_id,
+                    detection_class=detection_class,
+                    confidence=confidence,
+                    severity=severity,
+                    latitude=latitude,
+                    longitude=longitude,
+                    source=payload.get("source", "edge_mqtt"),
                     timestamp=datetime.utcnow()
                 )
                 db.add(detection)
                 await db.commit()
+                await db.refresh(detection)
 
-                # Run deduplication
                 incident = await process_detection_for_deduplication(db, detection)
 
-                # Broadcast over WS
+                # Broadcast MQTT packet telemetry
                 await ws_manager.broadcast({
-                    "event_type": "LIVE_TELEMETRY",
-                    "bus_code": active_bus.bus_code,
-                    "latitude": active_bus.latitude,
-                    "longitude": active_bus.longitude,
-                    "new_detection": {
+                    "event_type": "MQTT_PACKET",
+                    "topic": topic,
+                    "payload": payload,
+                    "detection_code": detection.detection_code,
+                    "incident_code": incident.incident_code if incident else None,
+                    "confirmations_count": incident.confirmations_count if incident else 1,
+                    "multi_bus_verified": incident.multi_bus_verified if incident else False,
+                    "timestamp": datetime.utcnow().isoformat()
+                })
+
+                # Broadcast detection & incident update
+                await ws_manager.broadcast({
+                    "event_type": "NEW_DETECTION",
+                    "detection": {
                         "detection_code": detection.detection_code,
+                        "bus_id": detection.bus_id,
                         "detection_class": detection.detection_class,
                         "confidence": detection.confidence,
                         "severity": detection.severity,
                         "latitude": detection.latitude,
-                        "longitude": detection.longitude
+                        "longitude": detection.longitude,
+                        "source": detection.source
                     },
                     "incident": {
                         "incident_code": incident.incident_code,
                         "issue_type": incident.issue_type,
                         "severity": incident.severity,
+                        "confidence": incident.confidence,
                         "confirmations_count": incident.confirmations_count,
-                        "multi_bus_verified": incident.multi_bus_verified
+                        "multi_bus_verified": incident.multi_bus_verified,
+                        "work_order_id": incident.work_order_id
                     } if incident else None
                 })
-        except Exception as e:
-            logger.error(f"Error in background simulation loop: {e}")
+        elif "telemetry" in topic:
+            await ws_manager.broadcast({
+                "event_type": "LIVE_TELEMETRY",
+                "bus_code": payload.get("bus_code", "BUS-104"),
+                "latitude": payload.get("latitude", 31.6340),
+                "longitude": payload.get("longitude", 74.8723)
+            })
+    except Exception as e:
+        logger.error(f"Error processing MQTT message on {topic}: {e}")
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -124,10 +222,10 @@ async def lifespan(app: FastAPI):
             except Exception as e:
                 logger.warning(f"Seed script execution: {e}")
 
-    # Start MQTT background service
+    # Start MQTT background service with on_mqtt_message callback
     try:
         loop = asyncio.get_running_loop()
-        mqtt_service.start(loop, None)
+        mqtt_service.start(loop, on_mqtt_message)
     except Exception as e:
         logger.warning(f"MQTT init warning: {e}")
 

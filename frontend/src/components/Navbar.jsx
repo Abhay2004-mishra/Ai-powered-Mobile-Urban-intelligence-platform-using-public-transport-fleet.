@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Shield, Bell, Cpu, Cloud, Radio, LogOut, User, Search, Award } from 'lucide-react';
+import { Shield, Bell, Cpu, Cloud, Radio, LogOut, User, Search, Award, Box } from 'lucide-react';
 import ProblemStatementModal from './ProblemStatementModal';
 
 const Navbar = () => {
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProblemModal, setShowProblemModal] = useState(false);
 
@@ -37,6 +39,15 @@ const Navbar = () => {
           >
             <Award className="w-3.5 h-3.5 text-cyan-400" />
             <span>SIH 26124 Showcase</span>
+          </button>
+
+          {/* 3D Bus & Workflow Direct Link */}
+          <button
+            onClick={() => navigate('/workflow')}
+            className="hidden md:flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-cyan-950/70 hover:bg-cyan-900/60 text-cyan-300 border border-cyan-500/40 text-xs font-bold transition shadow-sm"
+          >
+            <Box className="w-3.5 h-3.5 text-cyan-400" />
+            <span>3D Bus & Workflow</span>
           </button>
 
           {/* System Health Indicators */}

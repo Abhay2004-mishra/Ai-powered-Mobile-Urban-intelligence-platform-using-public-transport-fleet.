@@ -16,7 +16,8 @@ import {
   Wrench,
   Shield,
   Zap,
-  Gauge
+  Gauge,
+  Box
 } from 'lucide-react';
 
 const Sidebar = () => {
@@ -40,6 +41,13 @@ const Sidebar = () => {
       badge: 'Driver View'
     },
     { 
+      to: '/workflow', 
+      label: '3D Bus & Workflow', 
+      icon: Box, 
+      roles: ['admin', 'municipal_officer', 'field_worker', 'bus_operator'],
+      badge: '3D Studio'
+    },
+    { 
       to: '/users', 
       label: 'User Management', 
       icon: Users, 
@@ -50,14 +58,14 @@ const Sidebar = () => {
       to: '/work-orders', 
       label: role === 'field_worker' ? 'My Assigned Orders' : 'Work Orders & Dispatch', 
       icon: ClipboardList, 
-      roles: ['admin', 'municipal_officer', 'field_worker'],
+      roles: ['admin', 'municipal_officer', 'field_worker', 'bus_operator'],
       highlight: role === 'field_worker'
     },
     { 
       to: '/incidents', 
       label: 'Incidents Feed', 
       icon: AlertTriangle, 
-      roles: ['admin', 'municipal_officer', 'field_worker'] 
+      roles: ['admin', 'municipal_officer', 'field_worker', 'bus_operator'] 
     },
     { 
       to: '/fleet', 

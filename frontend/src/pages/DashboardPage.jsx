@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import KPICards from '../components/KPICards';
 import SIHDemoRunner from '../components/SIHDemoRunner';
 import MapContainer from '../components/MapContainer';
@@ -7,6 +8,9 @@ import IncidentModal from '../components/IncidentModal';
 import EdgeVisionStudio from '../components/EdgeVisionStudio';
 import ProblemStatementModal from '../components/ProblemStatementModal';
 import SpatialDeduplicationVisualizer from '../components/SpatialDeduplicationVisualizer';
+import Bus3DViewer from '../components/Bus3DViewer';
+import FleetConvoyRoadScan from '../components/FleetConvoyRoadScan';
+import WorkflowViewer from '../components/WorkflowViewer';
 import { useDemo } from '../context/DemoContext';
 import { 
   Award, 
@@ -21,10 +25,13 @@ import {
   BarChart2,
   Sparkles,
   Zap,
-  Building2
+  Building2,
+  Box,
+  ArrowRight
 } from 'lucide-react';
 
 const DashboardPage = () => {
+  const navigate = useNavigate();
   const { selectedIncident, setSelectedIncident } = useDemo();
   const [showProblemModal, setShowProblemModal] = useState(false);
   const [activeTab, setActiveTab] = useState('overview'); // 'overview', 'vision', 'dedup'
@@ -80,6 +87,14 @@ const DashboardPage = () => {
         {/* Action Showcase Triggers */}
         <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
           <button
+            onClick={() => navigate('/workflow')}
+            className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-cyan-600 via-blue-600 to-indigo-600 hover:from-cyan-500 hover:to-blue-500 text-white font-black text-xs shadow-xl shadow-cyan-600/25 transition flex items-center space-x-2 border border-cyan-400/40"
+          >
+            <Box className="w-4 h-4 text-cyan-200" />
+            <span>3D Bus & Workflow Studio</span>
+          </button>
+
+          <button
             onClick={() => setShowProblemModal(true)}
             className="px-4 py-2.5 rounded-2xl bg-gradient-to-r from-blue-600 via-indigo-600 to-purple-600 hover:from-blue-500 hover:to-indigo-500 text-white font-black text-xs shadow-xl shadow-blue-600/30 transition flex items-center space-x-2 border border-cyan-400/40"
           >
@@ -97,11 +112,13 @@ const DashboardPage = () => {
 
       {/* Dashboard View Switcher Tabs */}
       <div className="flex flex-wrap items-center justify-between gap-3 bg-gray-950/80 p-1.5 rounded-2xl border border-gray-800">
-        <div className="flex space-x-1">
+        <div className="flex flex-wrap gap-1">
           {[
             { id: 'overview', label: 'GIS Command Map & Feed', icon: MapPin },
+            { id: '3d-bus', label: '3D Bus Digital Twin', icon: Box },
+            { id: 'workflow', label: 'End-to-End System Workflow', icon: Layers },
             { id: 'vision', label: 'Edge AI Vision Studio (Live Cam)', icon: Cpu },
-            { id: 'dedup', label: 'Multi-Bus Spatial Deduplication Engine', icon: Radio },
+            { id: 'dedup', label: 'Spatial Deduplication Engine', icon: Radio },
           ].map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -147,6 +164,21 @@ const DashboardPage = () => {
           <div className="mt-4">
             <EdgeVisionStudio />
           </div>
+        </div>
+      )}
+
+      {/* TAB CONTENT: 3D BUS DIGITAL TWIN & CONVOY ROAD-SCAN */}
+      {activeTab === '3d-bus' && (
+        <div className="space-y-6">
+          <Bus3DViewer busCode="BUS-104" height="560px" />
+          <FleetConvoyRoadScan />
+        </div>
+      )}
+
+      {/* TAB CONTENT: END-TO-END WORKFLOW */}
+      {activeTab === 'workflow' && (
+        <div className="space-y-4">
+          <WorkflowViewer />
         </div>
       )}
 

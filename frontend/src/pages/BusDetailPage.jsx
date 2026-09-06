@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api from '../services/api';
 import EdgeVisionStudio from '../components/EdgeVisionStudio';
+import Bus3DViewer from '../components/Bus3DViewer';
 import { 
   Bus, 
   Cpu, 
@@ -14,13 +15,16 @@ import {
   Thermometer,
   Zap,
   Gauge,
-  Clock
+  Clock,
+  Box,
+  Layers
 } from 'lucide-react';
 
 const BusDetailPage = () => {
   const { busCode } = useParams();
   const navigate = useNavigate();
   const [data, setData] = useState(null);
+  const [activeViewTab, setActiveViewTab] = useState('3d');
 
   useEffect(() => {
     api.get(`/api/buses/${busCode}`).then(res => setData(res.data)).catch(console.error);
@@ -74,9 +78,50 @@ const BusDetailPage = () => {
         </div>
       </div>
 
-      {/* Embedded Live Edge Vision Studio */}
+      {/* View Switcher: 3D Digital Twin vs 2D Dashcam HUD */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-gray-950/80 p-1.5 rounded-2xl border border-gray-800">
+        <div className="flex space-x-1">
+          <button
+            onClick={() => setActiveViewTab('3d')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
+              activeViewTab === '3d'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/25'
+                : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            <Box className="w-3.5 h-3.5" />
+            <span>3D Bus Digital Twin & Sensor Matrix</span>
+          </button>
+
+          <button
+            onClick={() => setActiveViewTab('camera')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 ${
+              activeViewTab === 'camera'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/25'
+                : 'text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            <Camera className="w-3.5 h-3.5" />
+            <span>Live Camera Feed & AI Bounding Boxes</span>
+          </button>
+        </div>
+
+        <button
+          onClick={() => navigate('/workflow')}
+          className="hidden sm:flex items-center space-x-1.5 text-xs text-cyan-400 hover:text-cyan-300 font-bold px-3 py-1.5 rounded-xl hover:bg-gray-900 transition"
+        >
+          <span>View End-to-End System Workflow</span>
+          <ArrowLeft className="w-3.5 h-3.5 rotate-180" />
+        </button>
+      </div>
+
+      {/* Embedded Live 3D Twin or 2D Edge Vision */}
       <div>
-        <EdgeVisionStudio />
+        {activeViewTab === '3d' ? (
+          <Bus3DViewer busCode={bus.bus_code} height="520px" />
+        ) : (
+          <EdgeVisionStudio />
+        )}
       </div>
 
       {/* Hardware Diagnostics & Road Coverage Analytics Grid */}
